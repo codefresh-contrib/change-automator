@@ -1,0 +1,173 @@
+# This Workflow Template is used to create your first CI pipeline in CSDP
+# This CI pipeline builds a docker image using Kaniko, uploads image metadata to CSDP, and tests the image
+# https://codefresh.io/csdp-docs/docs/getting-started/quick-start/create-ci-pipeline/
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: auto-updater
+
+spec:
+  entrypoint: automate-changes
+  templates:
+    - name: automate-changes
+      inputs:
+        parameters:
+          - name: AUTOMATION_REPO
+            default: 'https://github.com/jcantosz/change-automator'
+          - name: GIT_USER_NAME
+            default: 'jcantosz'
+          - name: GIT_USER_EMAIL
+            default: 'jesse.antoszyk@codefresh.io'
+          - name: REVISION
+            default: 'main'
+          - name: GIT_TOKEN_SECRET
+            default: 'github-token'
+      dag:
+        # Sync and wait
+        tasks:
+          - name: select-parameters
+            template: select-parameters
+            inputs:
+              artifacts:
+                - name: repo
+                  path: /tmp/repo
+                  git:
+                    repo: '{{ inputs.parameters.REPO }}'
+                    revision: '{{ inputs.parameters.REVISION }}'
+                    usernameSecret:
+                      name: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+                      key: token
+            parameters:
+              - name: REPO
+                value: '{{ inputs.parameters.AUTOMATION_REPO }}'
+              - name: REVISION
+                value: '{{ inputs.parameters.REVISON }}'
+              - name: GIT_TOKEN_SECRET
+                value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+
+          # Update deploy repo, promote deployment to next environment
+          # --------------------
+          - name: clone-code-repo
+            templateRef:
+              name: argo-hub.git.0.0.2
+              template: clone
+            arguments:
+              parameters:
+                - name: REPO_URL
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_REPO }}'
+                - name: REVISION
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_BRANCH }}'
+                - name: GIT_TOKEN_SECRET
+                  value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+            depends: select-parameters
+
+          - name: update-repo
+            template: update-repo
+            arguments:
+              parameters:
+                - name: IMAGE
+                  value: '{{ inputs.parameters.IMAGE }}'
+                - name: PROMOTE_TO
+                  value: '{{ inputs.parameters.PROMOTE_TO }}'
+                - name: APP_PATH_PREFIX
+                  value: '{{ inputs.parameters.APP_PATH_PREFIX }}'
+              artifacts:
+                - name: repo
+                  from: "{{ tasks.clone-code-repo.outputs.artifacts.repo }}"
+            depends: clone-code-repo
+
+          - name: commit-push-step
+            templateRef:
+              name: argo-hub.git.0.0.2
+              template: commit
+            arguments:
+              parameters:
+                - name: MESSAGE
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_COMMIT_MESSAGE }}'
+                - name: GIT_USER_NAME
+                  value: '{{ inputs.parameters.GIT_USER_NAME }}'
+                - name: GIT_USER_EMAIL
+                  value: '{{ inputs.parameters.GIT_USER_EMAIL }}'
+              artifacts:
+                - name: repo
+                  from: "{{ tasks.update-repo.outputs.artifacts.repo  }}"
+            depends: update-repo
+
+    # Update image in repo using kustomize
+    - name: select-parameters
+      inputs:
+        artifacts:
+          - name: repo
+            path: /tmp/repo
+            git:
+              repo: '{{ inputs.parameters.REPO }}'
+              revision: '{{ inputs.parameters.REVISION }}'
+              usernameSecret:
+                name: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+                key: token
+        parameters:
+          - name: REPO
+            value: '{{ inputs.parameters.AUTOMATION_REPO }}'
+          - name: REVISION
+            value: '{{ inputs.parameters.REVISON }}'
+          - name: GIT_TOKEN_SECRET
+            value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+          - name: SCRIPT
+            value: generateCIVariables.sh
+      outputs:
+        parameters:
+        - name: TARGET_REPO
+          valueFrom:
+            path: /tmp/repo/target_repo.out
+        - name: TARGET_BRANCH
+          valueFrom:
+            path: /tmp/repo/target_branch.out
+        - name: TARGET_SEARCH_FILEPATH
+          valueFrom:
+            path: /tmp/repo/target_template_filepath.out
+        - name: TARGET_SEARCH_STRING
+          valueFrom:
+            default: "REPLACEME"   # Default value to use if retrieving valueFrom fails. If not provided workflow will fail instead
+            path: /tmp/repo/target_search_string.out
+        - name: TARGET_REPLACEMENT
+          valueFrom:
+            default: "AliceBlue"   # Default value to use if retrieving valueFrom fails. If not provided workflow will fail instead
+            path: /tmp/repo/target_replacement.out
+        - name: TARGET_OUTPUT_FILEPATH
+          valueFrom:
+            path: /tmp/repo/target_output_filepath.out
+        - name: TARGET_COMMIT_MESSAGE
+          valueFrom:
+            path: /tmp/repo/target_commit_message.out
+      image: ubuntu:20.04
+      cmd: [ bash ]
+      script: |
+        chmod +x {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
+        {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
+
+    - name: update-repo
+      serviceAccountName: argo-hub.git.0.0.2
+      inputs:
+        artifacts:
+          - name: repo
+            path: /tmp/repo
+        parameters:
+          - name: SEARCH_STRING
+          - name: SEARCH_FILE
+          - name: SEARCH_REPLACEMENT
+          - name: OUTPUT_FILE
+      outputs:
+        artifacts:
+          - name: repo
+            path: /tmp/repo
+            s3:
+              key: /{{ workflow.name }}/changed
+      script:
+        image: ubuntu:20.04
+        command: [ bash ]
+        source: |
+          repo_dir="{{ inputs.artifacts.repo.path }}"
+          input_filepath="${repo_dir}/{{ inputs.parameters.TARGET_TEMPLATE_FILEPATH }}"
+          output_filepath="${repo_dir}/{{ inputs.parameters.TARGET_OUTPUT_FILEPATH }}"
+
+          sed "s/{{ inputs.parameters.SEARCH_STRING }}/{{ inputs.parameters.SEARCH_REPLACEMENT }}/g" ${input_filepath} | tee ${output_filepath}
