@@ -88,6 +88,7 @@ spec:
 
     # Update image in repo using kustomize
     - name: select-parameters
+      serviceAccountName: argo-hub.git.0.0.2
       inputs:
         artifacts:
           - name: repo
@@ -151,6 +152,7 @@ spec:
         artifacts:
           - name: repo
             path: /tmp/repo
+            # remove this s3 reference if using minio
             s3:
               key: /{{ workflow.name }}/changed
       script:
@@ -158,7 +160,7 @@ spec:
         command: [ bash ]
         source: |
           repo_dir="{{ inputs.artifacts.repo.path }}"
-          input_filepath="${repo_dir}/{{ inputs.parameters.TARGET_TEMPLATE_FILEPATH }}"
-          output_filepath="${repo_dir}/{{ inputs.parameters.TARGET_OUTPUT_FILEPATH }}"
+          input_filepath="${repo_dir}/{{ inputs.parameters.SEARCH_FILE }}"
+          output_filepath="${repo_dir}/{{ inputs.parameters.OUTPUT_FILE }}"
 
           sed "s/{{ inputs.parameters.SEARCH_STRING }}/{{ inputs.parameters.SEARCH_REPLACEMENT }}/g" ${input_filepath} | tee ${output_filepath}
