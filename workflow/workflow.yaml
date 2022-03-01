@@ -27,23 +27,14 @@ spec:
         tasks:
           - name: select-parameters
             template: select-parameters
-            inputs:
-              artifacts:
-                - name: repo
-                  path: /tmp/repo
-                  git:
-                    repo: '{{ inputs.parameters.REPO }}'
-                    revision: '{{ inputs.parameters.REVISION }}'
-                    usernameSecret:
-                      name: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
-                      key: token
-            parameters:
-              - name: REPO
-                value: '{{ inputs.parameters.AUTOMATION_REPO }}'
-              - name: REVISION
-                value: '{{ inputs.parameters.REVISON }}'
-              - name: GIT_TOKEN_SECRET
-                value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
+            arguments:
+              parameters:
+                - name: REPO
+                  value: '{{ inputs.parameters.AUTOMATION_REPO }}'
+                - name: REVISION
+                  value: '{{ inputs.parameters.REVISION }}'
+                - name: GIT_TOKEN_SECRET
+                  value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
 
           # Update deploy repo, promote deployment to next environment
           # --------------------
@@ -65,12 +56,14 @@ spec:
             template: update-repo
             arguments:
               parameters:
-                - name: IMAGE
-                  value: '{{ inputs.parameters.IMAGE }}'
-                - name: PROMOTE_TO
-                  value: '{{ inputs.parameters.PROMOTE_TO }}'
-                - name: APP_PATH_PREFIX
-                  value: '{{ inputs.parameters.APP_PATH_PREFIX }}'
+                - name: SEARCH_STRING
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_SEARCH_STRING }}'
+                - name: SEARCH_FILE
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_SEARCH_FILEPATH }}'
+                - name: SEARCH_REPLACEMENT
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_REPLACEMENT }}'
+                - name: OUTPUT_FILE
+                  value: '{{ tasks.select-parameters.outputs.parameters.TARGET_OUTPUT_FILEPATH }}'
               artifacts:
                 - name: repo
                   from: "{{ tasks.clone-code-repo.outputs.artifacts.repo }}"
@@ -107,11 +100,8 @@ spec:
                 key: token
         parameters:
           - name: REPO
-            value: '{{ inputs.parameters.AUTOMATION_REPO }}'
           - name: REVISION
-            value: '{{ inputs.parameters.REVISON }}'
           - name: GIT_TOKEN_SECRET
-            value: '{{ inputs.parameters.GIT_TOKEN_SECRET }}'
           - name: SCRIPT
             value: generateCIVariables.sh
       outputs:
@@ -139,11 +129,12 @@ spec:
         - name: TARGET_COMMIT_MESSAGE
           valueFrom:
             path: /tmp/repo/target_commit_message.out
-      image: ubuntu:20.04
-      cmd: [ bash ]
-      script: |
-        chmod +x {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
-        {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
+      script:
+        image: ubuntu:20.04
+        command: [ bash ]
+        source: |
+          chmod +x {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
+          {{ inputs.artifacts.repo.path }}/{{ inputs.parameters.SCRIPT }}
 
     - name: update-repo
       serviceAccountName: argo-hub.git.0.0.2

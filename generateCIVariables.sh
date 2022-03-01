@@ -56,7 +56,7 @@ echo "Replacement text: ${REPLACEMENT_TEXT}"
 printf "${REPO}" > target_repo.out
 printf "${BRANCH}" > target_branch.out
 printf "${TEMPLATE_PATH}" > target_template_filepath.out
-printf "${OUTPUT_PATH}" > target_putput_filepath.out
+printf "${OUTPUT_PATH}" > target_output_filepath.out
 printf "${SEARCH_STRING}" > target_search_string.out
 printf "${REPLACEMENT_TEXT}" > target_replacement.out
 printf "${COMMIT}" > target_commit_message.out
