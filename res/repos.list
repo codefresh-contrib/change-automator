@@ -1,1 +1,4 @@
+https://github.com/codefresh-contrib/express-microservice2.git develop /public/stylesheets/style.tmpl /public/stylesheets/style.css REPLACEME
+https://github.com/codefresh-contrib/example-multiservice2.git feat/ctrlr-updates /ctrlr/flaskr/static/style.tmpl /ctrlr/flaskr/static/style.css REPLACEME
 https://github.com/codefresh-contrib/example-multiservice2.git feat/flaskr-ui-refresh /flask-ui/flaskr/static/style.tmpl /flask-ui/flaskr/static/style.css REPLACEME
+https://github.com/codefresh-contrib/example-multiservice2.git fix/buslog-critical-bug /buslog/flaskr/static/style.tmpl /buslog/flaskr/static/style.css REPLACEME
